@@ -434,20 +434,69 @@ pragma(msg, typeof(dispatcher2)); // @nogc void(ref double a, lazy double)
 This is not quite sufficient though, because it doesn't take care of parameter
 UDAs.
 
+### bolts.experimental.refraction at the rescue
+
+The `refract` meta-function returns a compile-time `Function` object that
+captures all the aspects of a function. It has a `mixture` property that
+returns a string that, used as a string mixin, can construct a declaration of
+the original function. For example:
+
 ```d
+enum original = refract!(scale, "scale");
+pragma(msg, original.mixture);
+// @nogc @system ReturnType!(scale) scale(Parameters!(scale) _0);
+```
+
+All the aspects of the function are accessible piecemeal, for example:
+
+```d
+pragma(msg, original.parameters[0].storageClasses); // ["ref"]
+```
+
+`Function` also has methods that return a new `Function`, with an alteration to
+one of the aspects. They can be used to create a variation fo the function. for
+example:
+
+```d
+pragma(msg,
+  original
+    .withName("dispatcher")
+    .withBody(q{{ resolve(_0[0])(_0); }})
+    .mixture
+);
 ```
 
 ```d
+@nogc @system ReturnType!(scale) dispatcher(Parameters!(scale) _0)
+{
+  resolve(_0[0])(_0);
+}
 ```
 
-```d
-```
+`openmethods` needs to change the type of the first parameter - while
+preserving storage classes. Easy:
 
 ```d
+pragma(msg,
+  original
+    .withName("dispatcher")
+    .withBody(q{{ resolve(_0[0])(_0); }})
+  .withParameters(
+    [original.parameters[0].withType(
+       "UnqualType!("~ original.parameters[0].type~")"),
+     original.parameters[1],
+    ])
+    .mixture
+);
 ```
 
-```d
-```
+This time the generated code cracks the parameter pack open:
+
 
 ```d
+@nogc @system ReturnType!(scale) dispatcher(
+  ref UnqualType!(Parameters!(scale)[0]) _0, Parameters!(scale)[1..2] _1)
+{
+  resolve(_)(_1);
+}
 ```

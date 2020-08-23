@@ -1,4 +1,4 @@
-# Function Generation in D: the Good, the Bad, the Ugly
+# Function Generation in D: the Good, the Bad, the Ugly, and the Cosmetic Surgery
 
 ## Introduction
 
@@ -305,8 +305,6 @@ classes and modifiers.
 
 ## The Ugly
 
-If you think that this is not bad enough, there's still more to come.
-
 So far we have looked at the function storage classes, modifiers, and UDAs, but
 we have merely passed the parameter list as a single, monolithic
 block. However, it is sometimes needed to perform adjustments to the parameter
@@ -316,7 +314,130 @@ to say that, given a function declaration like this one:
 
 
 ```d
-Matrix times(double a, scope virtual!Matrix b);
+Matrix times(virtual!Matrix a, double b);
+```
+
+`openmethods` generates this function:
+
+```d
+Matrix dispatcher(UnqualType!(virtual!(Matrix)) a, double b) {
+  return resolve(a)(a, b);
+}
+```
+
+The `virtual` template acts simply as a marker: it indicates which parameters
+should be taken into account (i.e. passed to `resolve`) when picking the
+appropriate specialization of `times`. Note that only `a` is passed to the
+`resolve` function - that is because the first parameter uses the `virtual!`
+marker and the second does not. As for `UnqualType`, it simply peels off the
+`virtual!` marker from the type. Thus in this case, `dispatcher` will be
+equivalent to:
+
+```d
+void dispatcher(Matrix a, double b) {
+  return resolve(a)(a, b);
+}
+```
+
+Bear in mind, though, that `dispatcher` is not allowed to use the type of the
+parameters directly. Inside the `openmethods` module, there is no `Matrix`
+type. Thus, when `openmethods` is handed a function declaration, it needs to
+synthesize a `dispatcher` function that refers to the declaration's parameter
+types exclusively *via* the declaration. In other words, it needs to use
+the `ReturnType` and `Parameters` templates from `std.traits` to extract the
+types involved i the declaration - just like we did in the examples above.
+
+Let's put aside function attributes and UDAs - we already discussed those in
+the previous section. Then the obvious solution seems to be:
+
+```d
+ReturnType!times dispatcher(
+  UnqualType!(Parameters!times[0]) a, Parameters!times[1] b) {
+  return resolve(a)(a, b);
+}
+
+pragma(msg, typeof(&dispatcher)); // Matrix function(Matrix, double)
+```
+
+Does this preserve *parameter* storage classes and UDAs? Unfortunately, it
+doesn't:
+
+```d
+@nogc void scale(ref virtual!Matrix m, lazy double by);
+
+@nogc ReturnType!scale dispatcher(
+  UnqualType!(Parameters!scale[0]) a, Parameters!scale[1] b) {
+  return resolve(a)(a, b);
+}
+
+pragma(msg, typeof(&dispatcher)); // void function(Matrix a, double b)
+```
+
+We lost the `ref` on the first parameter, and the `lazy` on the second. What
+happened to them?
+
+The culprit is `Parameters`. The template is a wrapper around an obscure
+feature of the [`is`](https://dlang.org/spec/expression.html#is_expression)
+operator used in conjunction with the `__parameters` type specialization. And
+it is quite a strange beast. Above we used it to copy the parameter list of a
+function, as a whole, to another function and it worked perfectly. The problem
+is what happens when you try to process the parameters one by one. Let's look
+at a few examples:
+
+
+```d
+pragma(msg, Parameters!scale.stringof); // (ref virtual!(Matrix), lazy double)
+pragma(msg, Parameters!scale[0].stringof); // virtual!(Matrix)
+pragma(msg, Parameters!scale[1].stringof); // double
+```
+
+We see that accessing a parameter individually loses everything about it bar
+the type.
+
+There is actually a way of extracting everything about a single parameter: use
+a *slice* instead of an element (yes this is getting strange):
+
+```d
+pragma(msg, Parameters!scale[0..1].stringof); // (ref virtual!(Matrix))
+pragma(msg, Parameters!scale[1..2].stringof); // (lazy double)
+```
+
+So this gives us a solution for handling the second parameter of `scale`:
+
+```d
+ReturnType!scale dispatcher(???, Parameters!scale[1..2]) { ... }
+```
+
+But what can we put in place of `???`. `UnqualType!(Parameters!scale[0..1])`
+would not work. `UnqualType` expects a type, and `Parameters!scale[1..2]` is
+not a type - it is an conglomerate that contains a type, and perhaps storage
+classes, type constructors and UDAs.
+
+At this point we have no other choice than, once again, constructing a string
+mixin. Something like this:
+
+```d
+mixin(q{
+    %s ReturnType!(scale) dispatcher2(
+      %s UnqualType!(Parameters!(scale)[1]) a,
+      Parameters!(scale)[1..2] b) {
+        resolve(a)(a, b);
+    }
+  }.format(
+    functionAttributes!scale & FunctionAttribute.nogc ? "@nogc " : ""
+    /* also handle other function attributes */,
+    __traits(getParameterStorageClasses, scale, 0)));
+
+pragma(msg, typeof(dispatcher2)); // @nogc void(ref double a, lazy double)
+```
+
+This is not quite sufficient though, because it doesn't take care of parameter
+UDAs.
+
+```d
+```
+
+```d
 ```
 
 ```d

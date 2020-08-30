@@ -16,8 +16,8 @@ remove or change user-defined attributes or parameter storage classes.
 It tuns out that this is exactly the problem I struggled with while trying to
 support all the bells and whistles of D functions in my `openmethods`
 library. Eventually I created a module that helps with this problem, and
-contributed it to (the bolts meta-programming
-library)[https://aliak00.github.io/bolts/bolts.html].
+contributed it to the [bolts meta-programming
+library](https://aliak00.github.io/bolts/bolts.html).
 
 But first, let's take a closer look at function generation in D.
 
@@ -87,8 +87,8 @@ pragma(msg, typeof(forward!testPlus));
 ```
 
 Talking about UDAs, that's one of the issues with the solution above: it
-doesn't carry *function* UDAs. Also, it doesn't work with `ref` returning
-functions. Both issues are easily fixed:
+doesn't carry *function* UDAs. Also, it doesn't work with
+functions returning a reference. It is easy to fix both issues:
 
 ```d
 template forward(alias fun)
@@ -96,7 +96,7 @@ template forward(alias fun)
   import std.traits: Parameters;
   static foreach (ovl; __traits(getOverloads, __traits(parent, fun), __traits(identifier, fun)))
   {
-    @(__traits(getAttributes, fun)) // also copy UDAs
+    @(__traits(getAttributes, fun)) // copy function UDAs
     auto ref forward(Parameters!ovl args)
     {
       return ovl(args);
@@ -122,7 +122,7 @@ automatically deemed safe by the compiler.
 
 Andrei's challenge was not exactly what we discussed in the previous
 section. It came with a bit of pseudocode that suggested that the template
-should not be eponymous. in other word, I believe that the exact task was to
+should not be eponymous. In other word, I believe that the exact task was to
 write a template that would be used like this: `forward!fun.fun(...)`. Here is
 the pseudocode:
 
@@ -168,9 +168,9 @@ template forward(alias fun)
 ```
 
 This doesn't work because a string mixin can only be used to create expressions
-or statement lists.
+or statements.
 
-The solution is thus to simply extend the mixin untill it encompasses the
+The solution is thus to simply expand the mixin to  encompass the
 entire function definition. The token-quote operator `q{}` is very handy for
 this:
 
@@ -192,8 +192,8 @@ template forward(alias fun)
 }
 ```
 
-String mixins are powerful, but they are essentially C macros. For many D
-programmers, resorting on a string mixin always feels like a defeat.
+String mixins are powerful, but they are, essentially, C macros. For many D
+programmers, resorting on a string mixin feels like a defeat.
 
 Let us now move to a similar, yet quite more difficult challenge:
 
@@ -287,15 +287,15 @@ a reference.
 See, the reason why everything worked almost by magic in the first challenge is
 that we called the wrapped function. It enabled the compiler to deduce almost
 all the characteristics of the original function, and copy them to the
-forwarder function. Here we have no such model. The compiler will copy *some*
-of the aspects of the function (`pure`, `@safe`, etc) to match those of the
-overriden function, but not some others (`ref`, `const` and the other
+forwarder function. Here we have no model to copy from. The compiler will copy
+*some* of the aspects of the function (`pure`, `@safe`, etc) to match those of
+the overriden function, but not some others (`ref`, `const` and the other
 modifiers).
 
 Then there is the issue of the function modifiers: `const`, `immutable`,
 `shared`, and `static`. These are yet another category of function "aspects".
 
-At this point, there is no other option than to painstakingly analyze a subset
+At this point, there is no other option than to painstakingly analyze some
 of the function attributes by means of traits, convert them to a string, to be
 injected in the string mixin:
 
@@ -332,13 +332,14 @@ I encountered this problem in my `openmethods` library. During the "Perfect
 Forwaring" discussion, it appeared that I was not the only one who wanted to do
 this.
 
-I won't dwelve into the details of `openmethods` here(see this blog post for
-that); for the purpose of this article, it suffices to say that, given a
-function declaration like this one:
+I won't dwelve into the details of `openmethods` here (see
+[here](https://dlang.org/blog/2017/08/28/open-methods-from-c-to-d/) for an
+overview of the module); for the purpose of this article, it suffices to say
+that, given a function declaration like this one:
 
 
 ```d
-Matrix plus(virtual!Matrix a, double b);
+Matrix times(virtual!Matrix a, double b);
 ```
 
 `openmethods` generates this function:
@@ -350,11 +351,11 @@ Matrix dispatcher(Matrix a, double b)
 }
 ```
 
-The `virtual` template acts simply as a marker: it indicates which parameters
-should be taken into account (i.e. passed to `resolve`) when picking the
-appropriate specialization of `times`. Note that only `a` is passed to the
-`resolve` function - that is because the first parameter uses the `virtual!`
-marker and the second does not.
+The `virtual` template is a marker: it indicates which parameters should be
+taken into account (i.e. passed to `resolve`) when picking the appropriate
+specialization of `times`. Note that only `a` is passed to the `resolve`
+function - that is because the first parameter uses the `virtual!`  marker and
+the second does not.
 
 Bear in mind, though, that `dispatcher` is not allowed to use the type of the
 parameters directly. Inside the `openmethods` module, there is no `Matrix`
@@ -386,8 +387,7 @@ doesn't:
 ```d
 @nogc void scale(ref virtual!Matrix m, lazy double by);
 
-@nogc ReturnType!scale dispatcher(
-  RemoveVirtual!(Parameters!scale[0]) a, Parameters!scale[1] b)
+@nogc ReturnType!scale dispatcher(RemoveVirtual!(Parameters!scale[0]) a, Parameters!scale[1] b)
 {
   return resolve(a)(a, b);
 }
@@ -398,12 +398,12 @@ pragma(msg, typeof(&dispatcher)); // void function(Matrix a, double b)
 We lost the `ref` on the first parameter, and the `lazy` on the second. What
 happened to them?
 
-The culprit is `Parameters`. The template is a wrapper around an obscure
+The culprit is `Parameters`. This template is a wrapper around an obscure
 feature of the [`is`](https://dlang.org/spec/expression.html#is_expression)
 operator used in conjunction with the `__parameters` type specialization. And
 it is quite a strange beast. Above we used it to copy the parameter list of a
 function, as a whole, to another function and it worked perfectly. The problem
-is what happens when you try to process the parameters one by one. Let's look
+is what happens when you try to process the parameters separately. Let's look
 at a few examples:
 
 
@@ -413,11 +413,12 @@ pragma(msg, Parameters!scale[0].stringof); // virtual!(Matrix)
 pragma(msg, Parameters!scale[1].stringof); // double
 ```
 
-We see that accessing a parameter individually loses everything about it bar
-the type.
+We see that accessing a parameter individually returns the type - and discards
+everything else!
 
 There is actually a way of extracting everything about a single parameter: use
-a *slice* instead of an element (yes this is getting strange):
+a *slice* instead of an element of the paramneter pack (yes this is getting
+strange):
 
 ```d
 pragma(msg, Parameters!scale[0..1].stringof); // (ref virtual!(Matrix))
@@ -432,7 +433,7 @@ ReturnType!scale dispatcher(???, Parameters!scale[1..2]) { ... }
 
 But what can we put in place of `???`. `RemoveVirtual!(Parameters!scale[0..1])`
 would not work. `RemoveVirtual` expects a type, and `Parameters!scale[1..2]` is
-not a type - it is a strange conglomerate that contains a type, and perhaps
+not a type - it is a sort of conglomerate that contains a type, and perhaps
 storage classes, type constructors and UDAs.
 
 At this point we have no other choice but, once again, to construct a string
@@ -470,35 +471,35 @@ D's motley set of features related to meta-programming.
 `refraction`'s entry point is the `refract` function template. It takes a
 function and an "anchor" string, and returns an immutable `Function` object
 that captures all the aspects of a function. `Function` objects can be used at
-compile-time. It is, actually, their raison d'etre.
+compile-time. It is, actually, their raison d'être.
 
 `Function` has a `mixture` property that returns a declaration for the original
 function. For example:
 
 ```d
-enum original = refract!(scale, "scale");
-pragma(msg, original.mixture);
-// @nogc @system ReturnType!(scale) scale(Parameters!(scale) _0);
+Matrix times(virtual!Matrix a, double b);
+pragma(msg, refract!(times, "times").mixture);
+// @system ReturnType!(times) times(Parameters!(times) _0);
 ```
 
 Why does `refract` need the anchor string? Can't the string `"scale"` be
 inferred from the function, by means of `__traits(identifier...)`?  Yes it can,
-but we don't want to use it. The whole point of the library is to be used in
+but we don't want to use this. The whole point of the library is to be used in
 templates, where, typically, the function is passed to `refract` via an
-alias. In general, the function's has no meaning in the template's scope - or
-if, by chance, the name exists in the template's scope, it does not represent
-the function. All the meta-expressions used to dissect the function must work
-in terms of the alias, i.e. the *local* symbol `fun`.
+alias. In general, the function's name has no meaning in the template's scope -
+or if, by chance, the name exists, it does not name the function. All the
+meta-expressions used to dissect the function must work in terms of the alias,
+i.e. the *local* symbol `fun`.
 
 Consider:
 
 ```d
 module matrix;
 
-Matrix plus(virtual!Matrix a, double b);
+Matrix times(virtual!Matrix a, double b);
 
-Method!plus plusMethod; // openmethods creates a `Method` object for each
-                        // declared method
+Method!times timesMethod; // openmethods creates a `Method` object for each
+                          // declared method
 
 module openmethods;
 
@@ -511,18 +512,18 @@ struct Method(alias fun)
 }
 ```
 
-There is no `scale`, and no `Matrix`, in `module openmethods`; and even if they
-existed, they could *not* be the `scale` function and the `Matrix` class from
-`module matrix`, as this would assume circular dependencies between the two
-modules - something that D forbids by default.
-
-The return type is accessible, though, but it has to be expressed in terms of
-`fun`, thus: `ReturnType!(fun)`.
+There is no `times`, and no `Matrix`, in `module openmethods`; and even if they
+existed, they could *not* be the `times` function and the `Matrix` class from
+`module matrix`, as this would require a circular dependency between the two
+modules - something that D forbids by default. However, there is a `fun`
+symbol, and it aliases the function; thus the return type can be expressed as
+`ReturnType!(fun)`.
 
 All the aspects of the function are available piecemeal; for example:
 
 ```d
-pragma(msg, original.parameters[0].storageClasses); // ["ref"]
+@nogc void scale(ref virtual!Matrix m, lazy double by);
+pragma(msg, refract!(scale, "scale").parameters[0].storageClasses); // ["ref"]
 ```
 
 `Function` also has methods that return a new `Function` object, with an
@@ -530,61 +531,58 @@ alteration to one of the aspects. They can be used to create a variation of a
 function. For example:
 
 ```d
+@nogc void scale(ref virtual!Matrix m, lazy double by);
+
 pragma(msg,
-  original
-    .withName("dispatcher")
-    .withBody(q{{ resolve(_0[0])(_0); }})
-    .mixture
+  refract!(scale, "scale")
+  .withName("dispatcher")
+  .withBody(q{{ resolve(_0[0])(_0); }})
+  .mixture
 );
 ```
 
-This is what I mean by "refraction": make the blueprint of a function, perform
-some alterations, and return a string - called a mixture - that, passed to
-`mixin`, will create a new function.
-
-
-```d @nogc @system ReturnType!(scale)
-dispatcher(Parameters!(scale) _0) { resolve(_0[0])(_0); }
 ```
+@nogc @system ReturnType!(scale) dispatcher(ref Parameters!(scale)[0] _0, lazy Parameters!(scale)[1] _1)
+{
+  resolve(_0[0])(_0);
+}
+```
+
+This is the reason behind the name "refraction": the module create a blueprint
+of a function, perform some alterations on it, and return a string - called a
+mixture - that, passed to `mixin`, will create a new function.
 
 `openmethods` needs to change the type of the first parameter - while
 preserving storage classes. With `bolts.experimental.refraction` this becomes
 easy:
 
 ```d
+original = refract!(scale, "scale");
+
 pragma(msg,
   original
-    .withName("dispatcher")
+  .withName("dispatcher")
   .withParameters(
     [original.parameters[0].withType(
-       "RemoveVirtual!("~ original.parameters[0].type~")"),
+        "RemoveVirtual!(%s)".format(original.parameters[0].type)),
      original.parameters[1],
     ])
-    .withBody(q{{ resolve(_0)(_0, _1); }})
-    .mixture
+  .withBody(q{{
+      return resolve(_0)(%s);
+   }}.format(original.argumentMixture))
 );
 ```
 
 This time the generated code splits the parameter pack into individual
 components:
-mag
 
 ```d
 @nogc @system ReturnType!(scale) dispatcher(
-  ref RemoveVirtual!(Parameters!(scale)[0]) _0, Parameters!(scale)[1..2] _1)
+  ref RemoveVirtual!(Parameters!(scale)[0]) _0, lazy Parameters!(scale)[1] _1)
 {
-  resolve(_0)(_0, _1);
+  return resolve(_0)(_0, _1);
 }
 ```
-
-Note how the first and second parameters are handled differently. The first
-parameter is cracked open, because we need to replace the type. That forces us
-to access the first `Parameters` value using indexation - and that loses the
-storage classes, UDAs, etc. So they need to be re-applied explicitly.
-
-The second parameter, on the other hand, does not have this problem. It is not
-edited; thus the slice of ``Parameters` trick can be used. The `lazy` is indeed
-there - but it is inside the parameter conglomerate.
 
 ## Conclusion
 

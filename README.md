@@ -482,14 +482,14 @@ pragma(msg, refract!(times, "times").mixture);
 // @system ReturnType!(times) times(Parameters!(times) _0);
 ```
 
-Why does `refract` need the anchor string? Can't the string `"scale"` be
+Why does `refract` need the anchor string? Can't the string `"times"` be
 inferred from the function, by means of `__traits(identifier...)`?  Yes it can,
-but we don't want to use this. The whole point of the library is to be used in
-templates, where, typically, the function is passed to `refract` via an
-alias. In general, the function's name has no meaning in the template's scope -
-or if, by chance, the name exists, it does not name the function. All the
-meta-expressions used to dissect the function must work in terms of the alias,
-i.e. the *local* symbol `fun`.
+but in real applications we don't want to use this. The whole point of the
+library is to be used in templates, where, typically, the function is passed to
+`refract` via an alias. In general, the function's name has no meaning in the
+template's scope - or if, by chance, the name exists, it does not name the
+function. All the meta-expressions used to dissect the function must work in
+terms of the *local* symbol that identifies the alias.
 
 Consider:
 
@@ -516,7 +516,7 @@ There is no `times`, and no `Matrix`, in `module openmethods`; and even if they
 existed, they could *not* be the `times` function and the `Matrix` class from
 `module matrix`, as this would require a circular dependency between the two
 modules - something that D forbids by default. However, there is a `fun`
-symbol, and it aliases the function; thus the return type can be expressed as
+symbol, and it aliases to the function; thus the return type can be expressed as
 `ReturnType!(fun)`.
 
 All the aspects of the function are available piecemeal; for example:
@@ -531,8 +531,6 @@ alteration to one of the aspects. They can be used to create a variation of a
 function. For example:
 
 ```d
-@nogc void scale(ref virtual!Matrix m, lazy double by);
-
 pragma(msg,
   refract!(scale, "scale")
   .withName("dispatcher")
@@ -578,23 +576,32 @@ components:
 
 ```d
 @nogc @system ReturnType!(scale) dispatcher(
-  ref RemoveVirtual!(Parameters!(scale)[0]) _0, lazy Parameters!(scale)[1] _1)
+  ref RemoveVirtual!(Parameters!(scale)[0]) _0, Parameters!(scale)[1..2] _1)
 {
-  return resolve(_0)(_0, _1);
+  return resolve(_0)(_0);
 }
 ```
+
+Note how the first and second parameters are handled differently. The first
+parameter is cracked open, because we need to replace the type. That forces us
+to access the first `Parameters` value using indexation - and that loses the
+storage classes, UDAs, etc. So they need to be re-applied explicitly.
+
+The second parameter, on the other hand, does not have this problem. It is not
+edited; thus the `Parameters` slice trick can be used. The `lazy` is indeed
+there - but it is inside the parameter conglomerate.
 
 ## Conclusion
 
 Initially, D looked almost as good as Lisp for generating functions. As we
-tried to gain finer control on the generated code, our code started to look a
-lot more like C macros; in fact, in some cases, it was even worse: we have to
-put an entire function definition in a string mixin to generate just its
-name. This is due to the fact that D is not as "regular" a language
-as Lisp.
+tried to gain finer control on the generated function, our code started to look
+a lot more like C macros; in fact, in some respect, it was even worse: we had
+to put an entire function definition in a string mixin just to set its
+name.
 
-Some of the people helming the evolution of D are working on addressing this
-problem, and it is my hope that a much better D will emerge.
+This is due to the fact that D is not as "regular" a language as Lisp. Some of
+the people helming the evolution of D are working on addressing this problem,
+and it is my hope that a better D will emerge in a not-too-distant future.
 
 In the meantime, the experimental refraction module from the bolts
 meta-programming library offers a saner, easier way of generating functions

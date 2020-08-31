@@ -2,8 +2,8 @@
 
 ## Introduction
 
-A while ago Andrei started a thread ((Perfect
-Forwarding)[https://forum.dlang.org/post/rfim9h$a45$1@digitalmars.com]) in the
+A while ago Andrei started a thread [Perfect
+Forwarding](https://forum.dlang.org/post/rfim9h$a45$1@digitalmars.com) in the
 D forum about a challenge, which came up during the July 2020 beerconf:
 
 > Write an idiomatic template `forward` that takes an alias `fun` and defines
@@ -237,9 +237,6 @@ class Mock(alias Interface) : Interface
   }
 }
 ```
-
-Note that this time we are forced to generate functions with different names,
-hence resort on string mixins.
 
 Alas this fails to compile with errors like:
 
